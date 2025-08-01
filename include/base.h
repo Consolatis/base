@@ -50,6 +50,7 @@ struct surface;
 struct seat {
 	struct client *client;
 	void (*register_surface)(struct seat *seat, struct surface *surface);
+	void (*unregister_surface)(struct seat *seat, struct surface *surface);
 	// FIXME: destroy() missing, including wl_array cleanup
 	/* Private */
 	struct wl_pointer *pointer;

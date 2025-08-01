@@ -79,12 +79,14 @@ surface_render_frame(struct surface *surface, uint32_t width, uint32_t height)
 static void
 surface_destroy(struct surface *surface)
 {
+	struct seat *seat = surface->client->seat;
+	if (seat) {
+		seat->unregister_surface(seat, surface);
+	}
 	if (surface->frame_callback.wl_callback) {
 		wl_callback_destroy(surface->frame_callback.wl_callback);
 	}
-	if (surface->surface) {
-		wl_surface_destroy(surface->surface);
-	}
+	wl_surface_destroy(surface->surface);
 	wl_array_release(&surface->callbacks);
 	free(surface);
 }

@@ -123,6 +123,7 @@ static const struct wl_pointer_listener pointer_listener = {
 static void
 seat_register_surface(struct seat *seat, struct surface *surface)
 {
+	/* TODO: fill NULL pointers */
 	struct surface **surface_ptr;
 	wl_array_for_each(surface_ptr, &seat->surfaces) {
 		assert(*surface_ptr != surface);
@@ -130,6 +131,19 @@ seat_register_surface(struct seat *seat, struct surface *surface)
 	surface_ptr = wl_array_add(&seat->surfaces, sizeof(*surface_ptr));
 	assert(surface_ptr);
 	*surface_ptr = surface;
+}
+
+static void
+seat_unregister_surface(struct seat *seat, struct surface *surface)
+{
+	struct surface **surface_ptr;
+	wl_array_for_each(surface_ptr, &seat->surfaces) {
+		if (*surface_ptr == surface) {
+			*surface_ptr = NULL;
+			return;
+		}
+	}
+	assert(false && "surface was never registered");
 }
 
 struct seat *
@@ -142,6 +156,7 @@ seat_create(struct client *client)
 	assert(seat);
 	wl_array_init(&seat->surfaces);
 	seat->register_surface = seat_register_surface;
+	seat->unregister_surface = seat_unregister_surface;
 	seat->pointer = wl_seat_get_pointer(client->state.wl_seat);
 	wl_pointer_add_listener(seat->pointer, &pointer_listener, seat);
 	return seat;
