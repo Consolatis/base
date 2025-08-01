@@ -36,6 +36,11 @@ opts=(
 	#-O2
 )
 
+if ! test -e "$WLR_PROTO_PREFIX"; then
+	echo "wlr-protocols not found, please adjust build.sh"
+	exit 1;
+fi
+
 mkdir -p build/protocols
 
 # FIXME: replace the .xml part
