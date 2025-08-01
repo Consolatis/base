@@ -1,7 +1,8 @@
+#include "base.h"
 #include <assert.h>
 #include <stdlib.h>
-#include <stdio.h>
-#include "base.h"
+
+#include "cursor-shape-v1.xml.h"
 
 #define SURFACE_CALLBACK(surface, name, ...) do {                \
 	struct surface_handler *handler;                         \
@@ -104,6 +105,18 @@ static void
 surface_emit_pointer_enter(struct surface *surface, wl_fixed_t sx, wl_fixed_t sy)
 {
 	SURFACE_CALLBACK(surface, pointer_enter, sx, sy);
+
+	/* Manually set the default cursor if there are no pointer_enter handlers installed */
+	struct surface_handler *handler;
+	wl_array_for_each(handler, &surface->callbacks) {
+		if (handler->pointer_enter) {
+			return;
+		}
+	}
+	struct seat *seat = surface->client->seat;
+	if (seat) {
+		seat->pointer_set_shape(seat, WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_DEFAULT);
+	}
 }
 
 static void
