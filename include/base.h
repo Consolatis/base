@@ -51,10 +51,15 @@ struct seat {
 	struct client *client;
 	void (*register_surface)(struct seat *seat, struct surface *surface);
 	void (*unregister_surface)(struct seat *seat, struct surface *surface);
+	void (*pointer_set_shape)(struct seat *seat, uint32_t shape);
 	// FIXME: destroy() missing, including wl_array cleanup
 	/* Private */
 	struct wl_pointer *pointer;
-	struct surface *focused_surface;
+	struct wp_cursor_shape_device_v1 *pointer_shape;
+	struct {
+		struct surface *surface;
+		uint32_t enter_serial;
+	} focused_surface;
 	struct wl_array surfaces;
 };
 

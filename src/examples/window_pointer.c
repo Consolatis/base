@@ -1,6 +1,8 @@
 #include "base.h"
 #include <stdio.h>
 
+#include "cursor-shape-v1.xml.h"
+
 static void
 handle_toplevel_reconfigure(struct toplevel *toplevel, void *data, int width, int height)
 {
@@ -20,6 +22,11 @@ static void
 handle_pointer_enter(struct surface *surface, void *data, wl_fixed_t sx, wl_fixed_t sy)
 {
 	fprintf(stderr, "pointer enter at %d,%d\n", wl_fixed_to_int(sx), wl_fixed_to_int(sy));
+	struct toplevel *toplevel = data;
+	struct seat *seat = toplevel->surface->client->seat;
+	if (seat) {
+		seat->pointer_set_shape(seat, WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_DEFAULT);
+	}
 }
 
 static void
@@ -32,6 +39,13 @@ static void
 handle_pointer_button(struct surface *surface, void *data, uint32_t button, uint32_t state)
 {
 	fprintf(stderr, "pointer button %u %s\n", button, state ? "pressed" : "released");
+	struct toplevel *toplevel = data;
+	struct seat *seat = toplevel->surface->client->seat;
+	if (seat && state) {
+		static uint32_t shape = 1;
+		seat->pointer_set_shape(seat, ++shape);
+		shape %= 34;
+	}
 }
 
 static void

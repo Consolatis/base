@@ -1,7 +1,9 @@
+#include "base.h"
 #include <assert.h>
 #include <stdlib.h>
 #include <stdio.h>
-#include "base.h"
+
+#include "cursor-shape-v1.xml.h"
 
 static struct surface *
 get_surface(struct seat *seat, struct wl_surface *wl_surface)
@@ -23,7 +25,8 @@ handle_pointer_enter(void *data, struct wl_pointer *wl_pointer, uint32_t serial,
 {
 	struct seat *seat = data;
 	struct surface *surface = get_surface(seat, wl_surface);
-	seat->focused_surface = surface;
+	seat->focused_surface.surface = surface;
+	seat->focused_surface.enter_serial = serial;
 	if (surface) {
 		surface->emit_pointer_enter(surface, surface_x, surface_y);
 	}
@@ -35,8 +38,9 @@ handle_pointer_leave(void *data, struct wl_pointer *wl_pointer,
 {
 	struct seat *seat = data;
 	struct surface *surface = get_surface(seat, wl_surface);
-	if (seat->focused_surface == surface) {
-		seat->focused_surface = NULL;
+	if (seat->focused_surface.surface == surface) {
+		seat->focused_surface.surface = NULL;
+		seat->focused_surface.enter_serial = 0;
 	}
 	if (surface) {
 		surface->emit_pointer_leave(surface);
@@ -48,7 +52,7 @@ handle_pointer_motion(void *data, struct wl_pointer *wl_pointer,
 		uint32_t time, wl_fixed_t surface_x, wl_fixed_t surface_y)
 {
 	struct seat *seat = data;
-	struct surface *surface = seat->focused_surface;
+	struct surface *surface = seat->focused_surface.surface;
 	if (surface) {
 		surface->emit_pointer_motion(surface, surface_x, surface_y);
 	}
@@ -59,7 +63,7 @@ handle_pointer_button(void *data, struct wl_pointer *wl_pointer,
 		uint32_t serial, uint32_t time, uint32_t button, uint32_t state)
 {
 	struct seat *seat = data;
-	struct surface *surface = seat->focused_surface;
+	struct surface *surface = seat->focused_surface.surface;
 	if (surface) {
 		surface->emit_pointer_button(surface, button, state);
 	}
@@ -146,6 +150,16 @@ seat_unregister_surface(struct seat *seat, struct surface *surface)
 	assert(false && "surface was never registered");
 }
 
+static void
+seat_pointer_set_shape(struct seat *seat, uint32_t shape)
+{
+	if (!seat->pointer_shape) {
+		return;
+	}
+	wp_cursor_shape_device_v1_set_shape(seat->pointer_shape,
+		seat->focused_surface.enter_serial, shape);
+}
+
 struct seat *
 seat_create(struct client *client)
 {
@@ -157,7 +171,13 @@ seat_create(struct client *client)
 	wl_array_init(&seat->surfaces);
 	seat->register_surface = seat_register_surface;
 	seat->unregister_surface = seat_unregister_surface;
+	seat->pointer_set_shape = seat_pointer_set_shape;
 	seat->pointer = wl_seat_get_pointer(client->state.wl_seat);
 	wl_pointer_add_listener(seat->pointer, &pointer_listener, seat);
+	struct wp_cursor_shape_manager_v1 *shape_manager = client->state.cursor_shape_manager;
+	if (shape_manager) {
+		seat->pointer_shape = wp_cursor_shape_manager_v1_get_pointer(
+			shape_manager, seat->pointer);
+	}
 	return seat;
 }
