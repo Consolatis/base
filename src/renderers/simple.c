@@ -45,6 +45,12 @@ clean_up:
 }
 
 void
+renderer_shm_solid_black(struct buffer *buffer)
+{
+	renderer_shm_solid(buffer, 0xff000000);
+}
+
+void
 renderer_shm_checkerboard(struct buffer *buffer)
 {
 	#define RECT_SIZE 8

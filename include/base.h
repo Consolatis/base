@@ -73,6 +73,7 @@ struct buffer {
 	struct wl_buffer *buffer;
 };
 void renderer_shm_solid(struct buffer *buffer, uint32_t pixel_value);
+void renderer_shm_solid_black(struct buffer *buffer);
 void renderer_shm_checkerboard(struct buffer *buffer);
 
 // move to renderers.h
