@@ -52,7 +52,8 @@ for proto in "${protocols[@]}"; do
 done
 
 for binary in "${binaries[@]}"; do
-	gcc -Wall -g                   \
+	printf "build/%s.. " "$binary"
+	if gcc -Wall -g                \
 		${sources[@]}          \
 		src/examples/$binary.c \
 		build/protocols/*.c    \
@@ -62,4 +63,10 @@ for binary in "${binaries[@]}"; do
 		"${opts[@]}"           \
 		-o build/$binary       \
 		"$@"
+	then
+		echo "done";
+	else
+		echo "failed";
+		exit 1;
+	fi
 done
