@@ -10,6 +10,7 @@ sources=(
 	src/interfaces/wl_surface.c
 	src/interfaces/wlr_layershell.c
 	src/interfaces/xdg_shell.c
+	src/interfaces/ext_foreign_toplevel_list.c
 	src/renderers/simple.c
 )
 
@@ -18,6 +19,7 @@ protocols=(
 	$PROTO_PREFIX/staging/cursor-shape/cursor-shape-v1.xml
 	$PROTO_PREFIX/unstable/tablet/tablet-unstable-v2.xml # required by cursor-shape
 	$PROTO_PREFIX/unstable/xdg-decoration/xdg-decoration-unstable-v1.xml
+	$PROTO_PREFIX/staging/ext-foreign-toplevel-list/ext-foreign-toplevel-list-v1.xml
 	$WLR_PROTO_PREFIX/unstable/wlr-layer-shell-unstable-v1.xml
 )
 
@@ -26,6 +28,7 @@ binaries=(
 	window_custom
 	window_animate
 	window_pointer
+	toplevel_list
 	panel
 	panel_animate
 )
