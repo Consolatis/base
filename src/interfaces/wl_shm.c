@@ -15,6 +15,9 @@ handle_buffer_release(void *data, struct wl_buffer *wl_buffer)
 {
 	struct buffer *buffer = data;
 	buffer->busy = false;
+#ifdef BUFFER_LOG
+	fprintf(stderr, "Buffer %p released\n", buffer);
+#endif
 }
 
 static struct wl_buffer_listener buffer_listener = {
@@ -55,9 +58,11 @@ get_buffer_count(struct shm_pool *pool)
 #endif
 
 static struct buffer *
-shm_pool_get_buffer(struct shm_pool *pool, uint32_t width, uint32_t height)
+shm_pool_get_buffer_with_format(struct shm_pool *pool, uint32_t width, uint32_t height, uint32_t fmt)
 {
-	uint32_t requested_size = width * 4 * height;
+	// FIXME: hardcoded bpp
+	const uint32_t bpp = 4;
+	uint32_t requested_size = width * bpp * height;
 
 	struct buffer *buffer;
 	struct shm_buffer *shm_buffer;
@@ -68,6 +73,10 @@ shm_pool_get_buffer(struct shm_pool *pool, uint32_t width, uint32_t height)
 		}
 		if (buffer->width == width && buffer->height == height) {
 			buffer->busy = true;
+#ifdef BUFFER_LOG
+			fprintf(stderr,"Re-using matching shm buffer, %u buffers in total\n",
+				get_buffer_count(pool));
+#endif
 			return buffer;
 		}
 		if (buffer->size >= requested_size) {
@@ -82,7 +91,7 @@ shm_pool_get_buffer(struct shm_pool *pool, uint32_t width, uint32_t height)
 			buffer->busy = true;
 			buffer->width = width;
 			buffer->height = height;
-			buffer->stride = width * 4;
+			buffer->stride = width * bpp;
 			update_buffer(buffer);
 			return buffer;
 		}
@@ -114,8 +123,8 @@ shm_pool_get_buffer(struct shm_pool *pool, uint32_t width, uint32_t height)
 	buffer->pool = pool;
 	buffer->width = width;
 	buffer->height = height;
-	buffer->shm_format = WL_SHM_FORMAT_ARGB8888;
-	buffer->stride = width * 4;
+	buffer->shm_format = fmt;
+	buffer->stride = width * bpp;
 	buffer->size = buffer->stride * height;
 
 #ifdef BUFFER_LOG
@@ -131,6 +140,12 @@ shm_pool_get_buffer(struct shm_pool *pool, uint32_t width, uint32_t height)
 	return buffer;
 }
 
+static struct buffer *
+shm_pool_get_buffer(struct shm_pool *pool, uint32_t width, uint32_t height)
+{
+	return shm_pool_get_buffer_with_format(pool, width, height, WL_SHM_FORMAT_ARGB8888);
+}
+
 struct shm_pool *
 shm_pool_create(struct client *client)
 {
@@ -138,5 +153,6 @@ shm_pool_create(struct client *client)
 	wl_array_init(&pool->buffers);
 	pool->client = client;
 	pool->get_buffer = shm_pool_get_buffer;
+	pool->get_buffer_with_format = shm_pool_get_buffer_with_format;
 	return pool;
 }
