@@ -189,6 +189,7 @@ struct layershell *layershell_create(struct client *client, struct wl_output *ou
 
 struct shm_pool {
 	struct buffer *(*get_buffer)(struct shm_pool *pool, uint32_t width, uint32_t height);
+	struct buffer *(*get_buffer_with_format)(struct shm_pool *pool, uint32_t width, uint32_t height, uint32_t format);
 	/* Private */
 	struct client *client;
 	struct wl_array buffers;
