@@ -1,7 +1,10 @@
 #include <assert.h>
+#include <errno.h>
 #include <stdlib.h>
 #include <string.h>
+
 #include "base.h"
+#include "log.h"
 
 #include "cursor-shape-v1.xml.h"
 #include "wlr-layer-shell-unstable-v1.xml.h"
@@ -93,6 +96,11 @@ client_connect(struct client *client)
 {
 	struct client_state *state = &client->state;
 	state->wl_display = wl_display_connect(NULL);
+	if (!state->wl_display) {
+		log("Failed to connect to compositor");
+		client->should_terminate = true;
+		return;
+	}
 	state->wl_registry = wl_display_get_registry(state->wl_display);
 	wl_registry_add_listener(state->wl_registry, &wl_registry_listener, client);
 	wl_display_roundtrip(state->wl_display);
@@ -104,12 +112,28 @@ client_connect(struct client *client)
 static void
 client_loop(struct client *client)
 {
-	while (!client->should_terminate && wl_display_dispatch(client->state.wl_display)) {
-		/* This space deliberately left blank */
+	while (!client->should_terminate) {
+		errno = 0;
+		while (wl_display_dispatch(client->state.wl_display)) {
+			/* This space deliberately left blank */
+			if (client->should_terminate) {
+				break;
+			}
+		}
+		if (client->should_terminate) {
+			break;
+		} else if (errno == EAGAIN) {
+			//log("EAGAIN");
+		} else if (errno) {
+			perror("something wrong with the loop");
+			break;
+		}
 	}
 
 	CLIENT_CALLBACK(client, disconnected);
-	wl_display_disconnect(client->state.wl_display);
+	if (client->state.wl_display) {
+		wl_display_disconnect(client->state.wl_display);
+	}
 }
 
 static void
