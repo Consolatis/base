@@ -1,10 +1,12 @@
 #!/bin/bash
 
+CC=gcc
 PROTO_PREFIX=/usr/share/wayland-protocols
 WLR_PROTO_PREFIX=/home/user/dev/labwc/subprojects/wlr-protocols
 
 sources=(
 	src/client.c
+	src/backends/drm.c
 	src/interfaces/ext_capture.c
 	src/interfaces/ext_foreign_toplevel_list.c
 	src/interfaces/wl_seat.c
@@ -35,6 +37,19 @@ binaries=(
 	toplevel_capture
 	panel
 	panel_animate
+	drm
+)
+
+includes=(
+	-I include/
+	-I /usr/include/drm/
+	-I build/protocols/
+)
+
+libs=(
+	-l wayland-client
+	-l drm
+	-l gbm
 )
 
 opts=(
@@ -60,13 +75,12 @@ done
 
 for binary in "${binaries[@]}"; do
 	printf "build/%s.. " "$binary"
-	if gcc -Wall -g                \
-		${sources[@]}          \
+	if $CC -Wall -g                \
+		"${sources[@]}"        \
 		src/examples/$binary.c \
 		build/protocols/*.c    \
-		-I include/            \
-		-I build/protocols/    \
-		-lwayland-client       \
+		"${includes[@]}"       \
+		"${libs[@]}"           \
 		"${opts[@]}"           \
 		-o build/$binary       \
 		"$@"
