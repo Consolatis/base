@@ -9,6 +9,7 @@ sources=(
 	src/backends/drm.c
 	src/interfaces/ext_capture.c
 	src/interfaces/ext_foreign_toplevel_list.c
+	src/interfaces/drm_lease.c
 	src/interfaces/wl_seat.c
 	src/interfaces/wl_shm.c
 	src/interfaces/wl_surface.c
@@ -25,6 +26,7 @@ protocols=(
 	$PROTO_PREFIX/staging/ext-foreign-toplevel-list/ext-foreign-toplevel-list-v1.xml
 	$PROTO_PREFIX/staging/ext-image-copy-capture/ext-image-copy-capture-v1.xml
 	$PROTO_PREFIX/staging/ext-image-capture-source/ext-image-capture-source-v1.xml
+	$PROTO_PREFIX/staging/drm-lease/drm-lease-v1.xml
 	$WLR_PROTO_PREFIX/unstable/wlr-layer-shell-unstable-v1.xml
 )
 
@@ -38,6 +40,7 @@ binaries=(
 	panel
 	panel_animate
 	drm
+	drm_lease
 )
 
 includes=(
