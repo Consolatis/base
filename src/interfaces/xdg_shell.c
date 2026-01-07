@@ -93,7 +93,7 @@ handle_toplevel_wm_capabilities(void *data, struct xdg_toplevel *xdg_toplevel,
 
 }
 
-struct xdg_toplevel_listener toplevel_listener = {
+static const struct xdg_toplevel_listener toplevel_listener = {
 	.configure = handle_toplevel_configure,
 	.close = handle_toplevel_close,
 	.configure_bounds = handle_toplevel_configure_bounds,
@@ -121,7 +121,7 @@ handle_surface_configure(void *data, struct xdg_surface *xdg_surface, uint32_t s
 }
 
 
-struct xdg_surface_listener surface_listener = {
+static const struct xdg_surface_listener surface_listener = {
 	.configure = handle_surface_configure,
 };
 

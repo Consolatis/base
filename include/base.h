@@ -45,6 +45,11 @@ struct client {
 
 struct client *client_create(void);
 
+struct geometry {
+	int width;
+	int height;
+};
+
 // maybe move to seat.h?
 struct surface;
 struct seat {
@@ -101,6 +106,7 @@ struct renderer;
 struct surface {
 	struct client *client;
 	struct wl_surface *surface;
+	struct geometry geometry;
 
 	/* surface functions */
 	void (*add_handler)(struct surface *surface, struct surface_handler handler);
@@ -136,11 +142,6 @@ struct toplevel_handler {
 	void (*reconfigure)(struct toplevel *toplevel, void *data, int width, int height);
 	void (*close)(struct toplevel *toplevel, void *data);
 	void *data;
-};
-
-struct geometry {
-	int width;
-	int height;
 };
 
 struct toplevel {
