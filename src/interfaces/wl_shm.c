@@ -64,6 +64,10 @@ shm_pool_get_buffer_with_format(struct shm_pool *pool, uint32_t width, uint32_t 
 	const uint32_t bpp = 4;
 	uint32_t requested_size = width * bpp * height;
 
+#ifdef BUFFER_LOG
+	fprintf(stderr, "shm_buffer size: %lu\n", pool->buffers.size);
+#endif
+
 	struct buffer *buffer;
 	struct shm_buffer *shm_buffer;
 	wl_array_for_each(shm_buffer, &pool->buffers) {
@@ -99,6 +103,7 @@ shm_pool_get_buffer_with_format(struct shm_pool *pool, uint32_t width, uint32_t 
 			wl_buffer_destroy(buffer->buffer);
 		}
 		close(buffer->fd);
+		free(buffer);
 		shm_buffer->buffer = NULL;
 #ifdef BUFFER_LOG
 		fprintf(stderr, "Closed buffer, %u buffers in total\n", get_buffer_count(pool));
