@@ -161,6 +161,11 @@ seat_pointer_set_shape(struct seat *seat, uint32_t shape)
 	if (!seat->pointer_shape) {
 		return;
 	}
+	if (!shape) {
+		wl_pointer_set_cursor(seat->pointer,
+			seat->focused_surface.enter_serial, NULL, 0, 0);
+		return;
+	}
 	wp_cursor_shape_device_v1_set_shape(seat->pointer_shape,
 		seat->focused_surface.enter_serial, shape);
 }
