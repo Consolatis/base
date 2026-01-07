@@ -91,6 +91,7 @@ struct surface_handler {
 	void (*pointer_enter)(struct surface *surface, void *data, wl_fixed_t sx, wl_fixed_t sy);
 	void (*pointer_motion)(struct surface *surface, void *data, wl_fixed_t sx, wl_fixed_t sy);
 	void (*pointer_button)(struct surface *surface, void *data, uint32_t button, uint32_t state);
+	void (*pointer_axis)(struct surface *surface, void *data, uint32_t axis, wl_fixed_t value);
 	void (*pointer_leave)(struct surface *surface, void *data);
 	void *data;
 };
@@ -110,9 +111,11 @@ struct surface {
 	void (*unmap)(struct surface *surface);
 	void (*destroy)(struct surface *surface);
 
+	/* Internal */
 	void (*emit_pointer_enter)(struct surface *surface, wl_fixed_t sx, wl_fixed_t sy);
 	void (*emit_pointer_motion)(struct surface *surface, wl_fixed_t sx, wl_fixed_t sy);
 	void (*emit_pointer_button)(struct surface *surface, uint32_t button, uint32_t state);
+	void (*emit_pointer_axis)(struct surface *surface, uint32_t axis, wl_fixed_t value);
 	void (*emit_pointer_leave)(struct surface *surface);
 
 	/* Private */

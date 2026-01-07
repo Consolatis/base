@@ -73,6 +73,11 @@ static void
 handle_pointer_axis(void *data, struct wl_pointer *wl_pointer,
 		uint32_t time, uint32_t axis, wl_fixed_t value)
 {
+	struct seat *seat = data;
+	struct surface *surface = seat->focused_surface.surface;
+	if (surface) {
+		surface->emit_pointer_axis(surface, axis, value);
+	}
 }
 
 static void
