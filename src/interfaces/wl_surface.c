@@ -36,6 +36,8 @@ surface_set_buffer(struct surface *surface, struct buffer *buffer)
 	wl_surface_attach(surface->surface, buffer->buffer, 0, 0);
 	wl_surface_damage_buffer(surface->surface, 0, 0, buffer->width, buffer->height);
 	wl_surface_commit(surface->surface);
+	surface->geometry.width = buffer->width;
+	surface->geometry.height = buffer->height;
 	wl_display_flush(surface->client->state.wl_display);
 }
 
