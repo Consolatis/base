@@ -132,6 +132,12 @@ surface_emit_pointer_button(struct surface *surface, uint32_t button, uint32_t s
 }
 
 static void
+surface_emit_pointer_axis(struct surface *surface, uint32_t axis, wl_fixed_t value)
+{
+	SURFACE_CALLBACK(surface, pointer_axis, axis, value);
+}
+
+static void
 surface_emit_pointer_leave(struct surface *surface)
 {
 	SURFACE_CALLBACK(surface, pointer_leave);
@@ -155,6 +161,7 @@ surface_create(struct client *client)
 	surface->emit_pointer_enter = surface_emit_pointer_enter;
 	surface->emit_pointer_motion = surface_emit_pointer_motion;
 	surface->emit_pointer_button = surface_emit_pointer_button;
+	surface->emit_pointer_axis = surface_emit_pointer_axis;
 	surface->emit_pointer_leave = surface_emit_pointer_leave;
 	surface->surface = wl_compositor_create_surface(client->state.wl_compositor);
 	surface->render_func = renderer_shm_checkerboard;

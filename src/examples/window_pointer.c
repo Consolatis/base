@@ -49,6 +49,12 @@ handle_pointer_button(struct surface *surface, void *data, uint32_t button, uint
 }
 
 static void
+handle_pointer_axis(struct surface *surface, void *data, uint32_t axis, wl_fixed_t value)
+{
+	fprintf(stderr, "pointer axis %u: %.2f\n", axis, wl_fixed_to_double(value));
+}
+
+static void
 handle_pointer_leave(struct surface *surface, void *data)
 {
 	fprintf(stderr, "pointer leave\n");
@@ -69,6 +75,7 @@ handle_initial_sync(struct client *client, void *data)
 		.pointer_enter = handle_pointer_enter,
 		.pointer_motion = handle_pointer_motion,
 		.pointer_button = handle_pointer_button,
+		.pointer_axis = handle_pointer_axis,
 		.pointer_leave = handle_pointer_leave,
 		.data = toplevel,
 	});
