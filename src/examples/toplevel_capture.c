@@ -1,7 +1,10 @@
+#include <assert.h>
 #include "base.h"
+#include "buffer.h"
+#include "ext_capture.h"
+#include "fourcc.h"
 #include "log.h"
 #include "toplevel_handle.h"
-#include "ext_capture.h"
 
 /*
 // TODO: not used at the moment
@@ -12,7 +15,8 @@ struct toplevel_capture {
 */
 
 // TODO: annoying global vars
-struct toplevel *toplevel = NULL;
+static struct base_allocator *allocator = NULL;
+static struct toplevel *toplevel = NULL;
 static struct ext_capture_manager *capture_manager = NULL;
 static struct ext_capture_session *capture_session = NULL;
 
@@ -35,19 +39,30 @@ handle_initial_sync(struct client *client, void *data)
 		.close = handle_toplevel_close_request,
 	});
 }
-
-static struct buffer *
-shm_buffer_allocator(struct ext_capture_session *session)
+static struct base_buffer *
+shm_allocator(struct ext_capture_session *session)
 {
-	struct shm_pool *pool = session->manager->client->shm_pool;
 	uint32_t *shm_format = session->shm.formats.data;
-	return pool->get_buffer_with_format(pool, session->width, session->height, *shm_format);
+	return allocator->create_buffer(allocator,
+		session->width, session->height,
+		fourcc_from_shm_format(*shm_format), DRM_FORMAT_MOD_LINEAR
+	);
+}
+
+static struct base_buffer *
+dmabuf_allocator(struct ext_capture_session *session)
+{
+	struct ext_capture_dmabuf_format *drm_fmt = session->drm.formats.data;
+	return allocator->create_buffer(allocator,
+		session->width, session->height,
+		drm_fmt->fourcc, drm_fmt->modifier
+	);
 }
 
 static void
-handle_capture_buffer_ready(struct ext_capture_session *session, void *data, struct buffer *buffer)
+handle_capture_buffer_ready(struct ext_capture_session *session, void *data, struct base_buffer *buffer)
 {
-	log("capture frame ready");
+	//log("capture frame ready");
 	if (!toplevel) {
 		return;
 	}
@@ -71,8 +86,24 @@ handle_toplevels_sync(struct toplevel_handle_manager *toplevels, void *data)
 	if (!capture_handle) {
 		return;
 	}
+
+	struct client *client = data;
+	ext_capture_allocator_func_t alloc_func = NULL;
+	if (!allocator) {
+		allocator = gbm_allocator_create(client->drm_fd);
+		if (allocator) {
+			alloc_func = dmabuf_allocator;
+			log("Using gbm allocator");
+		} else {
+			log("Falling back to SHM allocator");
+			allocator = shm_allocator_create();
+			alloc_func = shm_allocator;
+		}
+	}
+	assert(alloc_func);
+
 	capture_session = capture_manager->capture_toplevel(
-		capture_manager, capture_handle, shm_buffer_allocator);
+		capture_manager, capture_handle, alloc_func);
 	capture_session->add_handler(capture_session, (struct ext_capture_session_handler) {
 		.buffer_ready = handle_capture_buffer_ready,
 	});
@@ -91,7 +122,7 @@ main(int argc, const char *argv[])
 
 	toplevels->add_handler(toplevels, (struct toplevel_handle_manager_handler) {
 		.synced = handle_toplevels_sync,
-		.data = toplevels,
+		.data = client,
 	});
 
 	capture_manager = ext_capture_manager_create(client);

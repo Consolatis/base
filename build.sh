@@ -6,12 +6,16 @@ WLR_PROTO_PREFIX=/home/user/dev/labwc/subprojects/wlr-protocols
 
 sources=(
 	src/client.c
+	src/allocators/common.c
+	src/allocators/gbm.c
+	src/allocators/shm.c
+	src/allocators/pool.c
 	src/backends/drm.c
 	src/interfaces/ext_capture.c
 	src/interfaces/ext_foreign_toplevel_list.c
 	src/interfaces/drm_lease.c
+	src/interfaces/wl_buffer.c
 	src/interfaces/wl_seat.c
-	src/interfaces/wl_shm.c
 	src/interfaces/wl_surface.c
 	src/interfaces/wlr_layershell.c
 	src/interfaces/xdg_shell.c
@@ -19,6 +23,7 @@ sources=(
 )
 
 protocols=(
+	$PROTO_PREFIX/stable/linux-dmabuf/linux-dmabuf-v1.xml
 	$PROTO_PREFIX/stable/xdg-shell/xdg-shell.xml
 	$PROTO_PREFIX/staging/cursor-shape/cursor-shape-v1.xml
 	$PROTO_PREFIX/unstable/tablet/tablet-unstable-v2.xml # required by cursor-shape

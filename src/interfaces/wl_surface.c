@@ -1,6 +1,9 @@
-#include "base.h"
 #include <assert.h>
 #include <stdlib.h>
+
+#include "base.h"
+#include "buffer.h"
+#include "log.h"
 
 #include "cursor-shape-v1.xml.h"
 
@@ -23,17 +26,16 @@ surface_add_handler(struct surface *surface, struct surface_handler handler)
 }
 
 static void
-surface_set_render_func(struct surface *surface, void (*render_func)(struct buffer *buffer))
+surface_set_render_func(struct surface *surface, void (*render_func)(struct base_buffer *buffer))
 {
 	surface->render_func = render_func;
 }
 
 static void
-surface_set_buffer(struct surface *surface, struct buffer *buffer)
+surface_set_buffer(struct surface *surface, struct base_buffer *buffer)
 {
 	assert(surface->surface);
-	assert(buffer->buffer);
-	wl_surface_attach(surface->surface, buffer->buffer, 0, 0);
+	wl_surface_attach(surface->surface, buffer->get_wl_buffer(buffer, surface->client), 0, 0);
 	wl_surface_damage_buffer(surface->surface, 0, 0, buffer->width, buffer->height);
 	wl_surface_commit(surface->surface);
 	surface->geometry.width = buffer->width;
@@ -61,6 +63,7 @@ surface_request_frame(struct surface *surface,
 	void *data)
 {
 	if (surface->frame_callback.wl_callback) {
+		log("Already a frame callback pending");
 		return;
 	}
 	surface->frame_callback.user_callback = frame_callback;
@@ -73,8 +76,10 @@ surface_request_frame(struct surface *surface,
 static void
 surface_render_frame(struct surface *surface, uint32_t width, uint32_t height)
 {
-	struct shm_pool *pool = surface->client->shm_pool;
-	struct buffer *buffer = pool->get_buffer(pool, width, height);
+	struct base_allocator *pool = surface->client->shm_pool;
+	struct base_buffer *buffer = pool->create_buffer(
+		pool, width, height, DRM_FORMAT_XRGB8888, DRM_FORMAT_MOD_LINEAR
+	);
 	surface->render_func(buffer);
 	surface->set_buffer(surface, buffer);
 }
@@ -166,7 +171,7 @@ surface_create(struct client *client)
 	surface->emit_pointer_axis = surface_emit_pointer_axis;
 	surface->emit_pointer_leave = surface_emit_pointer_leave;
 	surface->surface = wl_compositor_create_surface(client->state.wl_compositor);
-	surface->render_func = renderer_shm_checkerboard;
+	surface->render_func = render_checkerboard;
 	if (client->seat) {
 		client->seat->register_surface(client->seat, surface);
 	}

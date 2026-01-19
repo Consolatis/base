@@ -3,6 +3,7 @@
 #include <time.h>
 #include <unistd.h>
 
+#include "buffer.h"
 #include "drm.h"
 #include "log.h"
 #include "render.h"
@@ -11,7 +12,7 @@
 
 struct fancy_output {
 	struct drm_output *output;
-	struct drm_dumb_buffer *buffers[BUFFERS];
+	struct base_buffer *buffers[BUFFERS];
 	uint32_t render_buffer;
 	/* FPS counter */
 	uint32_t fps_start;
@@ -43,8 +44,7 @@ dump_fps(struct fancy_output *fancy, uint32_t now, uint32_t delta)
 static bool
 show_frame(struct fancy_output *output)
 {
-	struct drm_dumb_buffer *dumb_buffer = output->buffers[output->render_buffer];
-	struct drm_buffer *buffer = &dumb_buffer->base;
+	struct base_buffer *buffer = output->buffers[output->render_buffer];
 
 	if (!output->output->set_buffer(output->output, buffer, /*block*/false)) {
 		log("output commit failed");
@@ -55,14 +55,15 @@ show_frame(struct fancy_output *output)
 
 static void
 render_frame(struct fancy_output *output) {
-	struct drm_dumb_buffer *dumb_buffer = output->buffers[output->render_buffer];
-	struct drm_buffer *buffer = &dumb_buffer->base;
+	struct base_buffer *buffer = output->buffers[output->render_buffer];
 
 	//raw_render_gradient(dumb_buffer->pixels, buffer->width, buffer->height, buffer->stride, 0x80u);
 	//raw_render_solid(dumb_buffer->pixels, buffer->width, buffer->height, buffer->stride, 0xff0000ffu);
-	raw_render_checkerboard(dumb_buffer->pixels, buffer->width, buffer->height, buffer->stride);
-	raw_render_y_line(dumb_buffer->pixels, buffer->width, buffer->height,
+	void *pixels = buffer->get_pixels(buffer, BASE_ALLOCATOR_REQ_WRITE);
+	raw_render_checkerboard(pixels, buffer->width, buffer->height, buffer->stride);
+	raw_render_y_line(pixels, buffer->width, buffer->height,
 			buffer->stride, output->center_x, 10, 0x00ff0000u);
+	buffer->get_pixels_end(buffer, pixels);
 	output->center_x = (output->center_x + 5) % buffer->width;
 }
 
@@ -94,6 +95,13 @@ main(int argc, const char *argv[])
 		return 1;
 	}
 
+	struct base_allocator *allocator = gbm_allocator_create(fd);
+	if (!allocator) {
+		log("Failed to create gbm allocator");
+		drm->destroy(drm);
+		return 2;
+	}
+
 	struct fancy_output *outputs = calloc(wl_list_length(&drm->outputs), sizeof(*outputs));
 	uint32_t now = get_time_msec();
 
@@ -116,11 +124,14 @@ main(int argc, const char *argv[])
 				fancy->center_x = mode->width / 2;
 				for (int b = 0; b < BUFFERS; b++) {
 					/* FIXME: needs a output->formats lookup */
-					fancy->buffers[b] = drm->allocator.create_dumb_buffer(
-						drm, mode->width, mode->height, DRM_FORMAT_XRGB8888);
+					fancy->buffers[b] = allocator->create_buffer(
+						allocator, mode->width, mode->height,
+						DRM_FORMAT_XRGB8888, DRM_FORMAT_MOD_LINEAR
+					);
+					fancy->buffers[b]->lock(fancy->buffers[b]);
 				}
 				render_frame(fancy);
-				output->set_mode(output, mode, &fancy->buffers[0]->base);
+				output->set_mode(output, mode, fancy->buffers[0]);
 
 				fancy->render_buffer = 1 % BUFFERS;
 				fancy->center_x = mode->width / 2 - 50;
@@ -167,9 +178,13 @@ main(int argc, const char *argv[])
 		}
 
 		for (int b = 0; b < BUFFERS; b++) {
-			fancy->buffers[b]->base.destroy(&fancy->buffers[b]->base);
+			struct base_buffer *buffer = fancy->buffers[b];
+			if (buffer) {
+				buffer->unlock(buffer);
+			}
 		}
 	}
+	allocator->destroy(allocator);
 
 	free(outputs);
 	drm->destroy(drm);

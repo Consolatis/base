@@ -2,7 +2,6 @@
 
 #include <stdbool.h>
 #include <wayland-client.h>
-//#include <wayland-util.h>
 
 struct client;
 struct client_handler {
@@ -35,15 +34,29 @@ struct client {
 		struct wp_cursor_shape_manager_v1 *cursor_shape_manager;
 	} state;
 
-	struct shm_pool *shm_pool;
+	struct base_allocator *shm_pool;
 	struct seat *seat;
+	struct base_wl_buffer_manager *buffer_manager;
+	int drm_fd;
 
 	/* Private */
 	bool should_terminate;
 	struct wl_array callbacks;
 };
-
 struct client *client_create(void);
+
+struct base_buffer;
+struct base_wl_buffer_manager {
+	struct client *client;
+	struct wl_buffer *(*create_wl_buffer)(struct base_wl_buffer_manager *manager, struct base_buffer *buffer);
+};
+struct base_wl_buffer_manager *base_wl_buffer_manager_create(struct client *client);
+
+/* Simple CPU based text renderers */
+void render_checkerboard(struct base_buffer *buffer);
+void render_solid(struct base_buffer *buffer, uint32_t color);
+void render_solid_black(struct base_buffer *buffer);
+void render_gradient(struct base_buffer *buffer, uint8_t blue);
 
 struct geometry {
 	int width;
@@ -70,27 +83,6 @@ struct seat {
 
 struct seat *seat_create(struct client *client);
 
-// move to buffer.h
-struct buffer {
-	/* Read only */
-	int fd;
-	bool busy;
-	uint32_t width;
-	uint32_t height;
-	uint32_t stride;
-	uint32_t size;
-	uint32_t shm_format;
-	struct shm_pool *pool;
-	struct wl_buffer *buffer;
-};
-void renderer_shm_solid(struct buffer *buffer, uint32_t pixel_value);
-void renderer_shm_solid_black(struct buffer *buffer);
-void renderer_shm_checkerboard(struct buffer *buffer);
-
-// move to renderers.h
-void renderer_shm_solid(struct buffer *buffer, uint32_t pixel_value);
-void renderer_shm_checkerboard(struct buffer *buffer);
-
 struct surface;
 struct surface_handler {
 	void (*pointer_enter)(struct surface *surface, void *data, wl_fixed_t sx, wl_fixed_t sy);
@@ -110,8 +102,8 @@ struct surface {
 
 	/* surface functions */
 	void (*add_handler)(struct surface *surface, struct surface_handler handler);
-	void (*set_buffer)(struct surface *surface, struct buffer *buffer);
-	void (*set_render_func)(struct surface *surface, void (*render_func)(struct buffer *buffer));
+	void (*set_buffer)(struct surface *surface, struct base_buffer *buffer);
+	void (*set_render_func)(struct surface *surface, void (*render_func)(struct base_buffer *buffer));
 	void (*request_frame)(struct surface *surface, void (*callback)(struct surface *surface, uint32_t time_ms, void *data), void *data);
 	void (*render_frame)(struct surface *surface, uint32_t width, uint32_t height);
 	void (*unmap)(struct surface *surface);
@@ -130,7 +122,7 @@ struct surface {
 		void (*user_callback)(struct surface *surface, uint32_t time_ms, void *data);
 		void *data;
 	} frame_callback;
-	void (*render_func)(struct buffer *buffer); /* Defaults to shm_buffer_render_checkerboard */
+	void (*render_func)(struct base_buffer *buffer); /* Defaults to buffer_render_checkerboard */
 	struct wl_array callbacks;
 };
 
@@ -189,13 +181,3 @@ struct layershell {
 struct layershell *layershell_create(struct client *client, struct wl_output *output,
 	uint32_t width, uint32_t height, uint32_t layer, uint32_t anchors);
 //struct toplevel *layershell_create_from_surface(struct surface *surface);
-
-
-struct shm_pool {
-	struct buffer *(*get_buffer)(struct shm_pool *pool, uint32_t width, uint32_t height);
-	struct buffer *(*get_buffer_with_format)(struct shm_pool *pool, uint32_t width, uint32_t height, uint32_t format);
-	/* Private */
-	struct client *client;
-	struct wl_array buffers;
-};
-struct shm_pool *shm_pool_create(struct client *client);

@@ -1,13 +1,17 @@
 #include "base.h"
+#include "buffer.h"
+
 #include "wlr-layer-shell-unstable-v1.xml.h"
 
 static void
 render_frame(struct layershell *layer, uint32_t color)
 {
-	struct shm_pool *pool = layer->surface->client->shm_pool;
-	struct buffer *buffer = pool->get_buffer(pool, layer->current.width,
-		layer->current.height);
-	renderer_shm_solid(buffer, color);
+	struct base_allocator *pool = layer->surface->client->shm_pool;
+	struct base_buffer *buffer = pool->create_buffer(pool,
+		layer->current.width, layer->current.height,
+		DRM_FORMAT_ARGB8888, DRM_FORMAT_MOD_LINEAR
+	);
+	render_solid(buffer, color);
 	layer->surface->set_buffer(layer->surface, buffer);
 }
 

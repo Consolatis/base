@@ -1,4 +1,5 @@
 #include "base.h"
+#include "buffer.h"
 
 static void
 handle_toplevel_reconfigure(struct toplevel *toplevel, void *data, int width, int height)
@@ -16,10 +17,10 @@ handle_toplevel_close_request(struct toplevel *toplevel, void *data)
 }
 
 static void
-handle_surface_render(struct buffer *buffer)
+handle_surface_render(struct base_buffer *buffer)
 {
 	//renderer_shm_solid(buffer, 0xaa000000);
-	renderer_shm_solid(buffer, 0x33333333);
+	render_solid(buffer, 0x33333333);
 }
 
 static void

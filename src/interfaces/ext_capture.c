@@ -4,6 +4,7 @@
 #include <string.h>
 
 #include "base.h"
+#include "buffer.h"
 #include "ext_capture.h"
 #include "log.h"
 #include "toplevel_handle.h"
@@ -23,7 +24,7 @@
 
 struct frame {
 	struct ext_capture_session *session;
-	struct buffer *buffer;
+	struct base_buffer *buffer;
 };
 
 static void _capture(struct ext_capture_session *session);
@@ -56,7 +57,7 @@ frame_handle_ready(void *data, struct ext_image_copy_capture_frame_v1 *frame)
 	struct ext_capture_session *session = capture_data->session;
 	ext_image_copy_capture_frame_v1_destroy(frame);
 
-	capture_data->buffer->busy = true;
+	capture_data->buffer->mark_dirty(capture_data->buffer);
 	SESSION_CALLBACK(session, buffer_ready, capture_data->buffer);
 	free(capture_data);
 	_capture(session);
@@ -82,18 +83,25 @@ static const struct ext_image_copy_capture_frame_v1_listener frame_listener = {
 
 static void
 _capture(struct ext_capture_session *session) {
-	struct buffer *buffer = session->request_buffer(session);
+	struct base_buffer *buffer = session->request_buffer(session);
 	if (!buffer) {
 		log("no buffer received from caller");
+		return;
+	}
+	struct client *client = session->manager->client;
+	struct wl_buffer *wl_buffer = buffer->get_wl_buffer(buffer, client);
+	if (!wl_buffer) {
+		log("failed to get wl_buffer from base_buffer");
 		return;
 	}
 	struct ext_image_copy_capture_frame_v1 *frame =
 		ext_image_copy_capture_session_v1_create_frame(session->session);
 	struct frame *capture_data = calloc(1, sizeof(*capture_data));
+	assert(capture_data);
 	capture_data->session = session;
 	capture_data->buffer = buffer;
 	ext_image_copy_capture_frame_v1_add_listener(frame, &frame_listener, capture_data);
-	ext_image_copy_capture_frame_v1_attach_buffer(frame, buffer->buffer);
+	ext_image_copy_capture_frame_v1_attach_buffer(frame, wl_buffer);
 	ext_image_copy_capture_frame_v1_damage_buffer(frame, 0, 0, buffer->width, buffer->height);
 	ext_image_copy_capture_frame_v1_capture(frame);
 }
@@ -124,11 +132,6 @@ session_handle_dmabuf_device(void *data, struct ext_image_copy_capture_session_v
 	//log("Got dmabuf device");
 }
 
-struct dmabuf_format {
-	uint32_t fourcc;
-	uint64_t modifier;
-};
-
 static void
 session_handle_dmabuf_format(void *data, struct ext_image_copy_capture_session_v1 *session_handle,
 		uint32_t format, struct wl_array *modifiers)
@@ -136,9 +139,9 @@ session_handle_dmabuf_format(void *data, struct ext_image_copy_capture_session_v
 	struct ext_capture_session *session = data;
 	uint64_t *modifier;
 	wl_array_for_each(modifier, modifiers) {
-		struct dmabuf_format *entry = wl_array_add(&session->drm_formats_tmp, sizeof(*entry));
+		struct ext_capture_dmabuf_format *entry = wl_array_add(&session->drm_formats_tmp, sizeof(*entry));
 		assert(entry);
-		*entry = (struct dmabuf_format){ format, *modifier };
+		*entry = (struct ext_capture_dmabuf_format){ format, *modifier };
 	}
 }
 
@@ -168,7 +171,7 @@ session_handle_done(void *data, struct ext_image_copy_capture_session_v1 *sessio
 	wl_array_init(&session->drm_formats_tmp);
 
 	log("Supported DRM formats:");
-	struct dmabuf_format *drm_format;
+	struct ext_capture_dmabuf_format *drm_format;
 	wl_array_for_each(drm_format, &session->drm.formats) {
 		log(" - 0x%08x (modifier 0x%016lx)", drm_format->fourcc, drm_format->modifier);
 	}
@@ -200,7 +203,7 @@ session_add_handler(struct ext_capture_session *session, struct ext_capture_sess
 
 static struct ext_capture_session *
 _create_session(struct ext_capture_manager *manager, struct ext_image_capture_source_v1 *src,
-		struct buffer *(*allocator)(struct ext_capture_session *session))
+		ext_capture_allocator_func_t allocator)
 {
 	struct ext_capture_session *session = calloc(1, sizeof(*session));
 	assert(session);

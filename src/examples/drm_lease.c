@@ -4,6 +4,7 @@
 #include <unistd.h>
 
 #include "base.h"
+#include "buffer.h"
 #include "drm.h"
 #include "drm_lease.h"
 #include "log.h"
@@ -13,7 +14,7 @@
 
 struct fancy_output {
 	struct drm_output *output;
-	struct drm_dumb_buffer *buffers[BUFFER_COUNT];
+	struct base_buffer *buffers[BUFFER_COUNT];
 	uint8_t render_buffer;
 	/* Animation stuff */
 	uint32_t center_x;
@@ -39,6 +40,8 @@ hello_kms(int drm_fd)
 
 	struct fancy_output fancy = {0};
 
+	struct base_allocator *alloc = gbm_allocator_create(drm_fd);
+
 	struct drm_output *output;
 	struct drm_output_mode *mode;
 	wl_list_for_each_reverse(output, &drm->outputs, link) {
@@ -50,10 +53,13 @@ hello_kms(int drm_fd)
 				fancy.output = output;
 				fancy.render_buffer = 1;
 				for (int i = 0; i < BUFFER_COUNT; i++) {
-					fancy.buffers[i] = drm->allocator.create_dumb_buffer(
-						drm, mode->width, mode->height, format);
+					fancy.buffers[i] = alloc->create_buffer(alloc,
+						mode->width, mode->height,
+						format, DRM_FORMAT_MOD_LINEAR
+					);
+					fancy.buffers[i]->lock(fancy.buffers[i]);
 				}
-				output->set_mode(output, mode, &fancy.buffers[0]->base);
+				output->set_mode(output, mode, fancy.buffers[0]);
 				log("Using %ux%u@%u", mode->width, mode->height, mode->refresh);
 				break;
 			}
@@ -70,23 +76,25 @@ hello_kms(int drm_fd)
 
 	time_t start = time(NULL);
 	time_t now = start;
-	while (now - start < 30) {
+	while (now - start < 10) {
 		if (!fancy.start) {
 			fancy.frames = 1;
 			fancy.start = start;
 		}
 
-		struct drm_dumb_buffer *buffer = fancy.buffers[fancy.render_buffer];
+		struct base_buffer *buffer = fancy.buffers[fancy.render_buffer];
+		void *pixels = buffer->get_pixels(buffer, BASE_ALLOCATOR_REQ_WRITE);
 
-		raw_render_checkerboard(buffer->pixels, buffer->base.width,
-			buffer->base.height, buffer->base.stride);
-		//raw_render_gradient(buffer->pixels, buffer->base.width,
-		//	buffer->base.height, buffer->base.stride, now & 0xff);
-		raw_render_y_line(buffer->pixels, buffer->base.width, buffer->base.height,
-			buffer->base.stride, fancy.center_x, 10, now & 0xffffffffu);
-		fancy.center_x = (fancy.center_x + 5) % buffer->base.width;
+		raw_render_checkerboard(pixels, buffer->width,
+			buffer->height, buffer->stride);
+		//raw_render_gradient(pixels, buffer->width,
+		//	buffer->height, buffer->stride, now & 0xff);
+		raw_render_y_line(pixels, buffer->width, buffer->height,
+			buffer->stride, fancy.center_x, 10, now & 0xffffffffu);
+		buffer->get_pixels_end(buffer, pixels);
+		fancy.center_x = (fancy.center_x + 5) % buffer->width;
 
-		fancy.output->set_buffer(output, &buffer->base, /*block*/true);
+		fancy.output->set_buffer(output, buffer, /*block*/true);
 		fancy.render_buffer = (fancy.render_buffer + 1) % BUFFER_COUNT;
 
 		fancy.frames++;
@@ -99,11 +107,12 @@ hello_kms(int drm_fd)
 	}
 
 	for (int i = 0; i < BUFFER_COUNT; i++) {
-		struct drm_dumb_buffer *buffer = fancy.buffers[i];
+		struct base_buffer *buffer = fancy.buffers[i];
 		if (buffer) {
-			buffer->base.destroy(&buffer->base);
+			buffer->unlock(buffer);
 		}
 	}
+	alloc->destroy(alloc);
 	log("Done");
 	drm->destroy(drm);
 }

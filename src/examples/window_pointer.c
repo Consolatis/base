@@ -79,7 +79,7 @@ handle_initial_sync(struct client *client, void *data)
 		.pointer_leave = handle_pointer_leave,
 		.data = toplevel,
 	});
-	toplevel->surface->set_render_func(toplevel->surface, renderer_shm_solid_black);
+	toplevel->surface->set_render_func(toplevel->surface, render_solid_black);
 }
 
 int

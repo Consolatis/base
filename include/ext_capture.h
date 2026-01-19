@@ -2,16 +2,22 @@
 
 #include <wayland-util.h>
 
+struct ext_capture_dmabuf_format {
+	uint32_t fourcc;
+	uint64_t modifier;
+};
+
 struct client;
+struct base_buffer;
 struct toplevel_handle;
 
 struct ext_capture_session;
 struct ext_capture_session_handler {
-	void (*buffer_ready)(struct ext_capture_session *session, void *data, struct buffer *buffer);
+	void (*buffer_ready)(struct ext_capture_session *session, void *data, struct base_buffer *buffer);
 	void *data;
 };
 
-typedef struct buffer *(*ext_capture_allocator_func_t)(struct ext_capture_session *session);
+typedef struct base_buffer *(*ext_capture_allocator_func_t)(struct ext_capture_session *session);
 
 struct ext_capture_session {
 	struct ext_capture_manager *manager;
@@ -25,6 +31,7 @@ struct ext_capture_session {
 	struct {
 		struct wl_array formats;
 	} drm;
+	void *data;
 	//struct output *output; /* may be NULL */
 
 	/* Private */

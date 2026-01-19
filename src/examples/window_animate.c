@@ -1,13 +1,17 @@
-#include "base.h"
 #include <stdio.h>
+
+#include "base.h"
+#include "buffer.h"
 
 static void
 render_frame(struct toplevel *toplevel, uint32_t color)
 {
-	struct shm_pool *pool = toplevel->surface->client->shm_pool;
-	struct buffer *buffer = pool->get_buffer(pool, toplevel->pending.width,
-		toplevel->pending.height);
-	renderer_shm_solid(buffer, color);
+	struct base_allocator *pool = toplevel->surface->client->shm_pool;
+	struct base_buffer *buffer = pool->create_buffer(pool,
+		toplevel->pending.width, toplevel->pending.height,
+		DRM_FORMAT_ARGB8888, DRM_FORMAT_MOD_LINEAR
+	);
+	render_solid(buffer, color);
 	toplevel->surface->set_buffer(toplevel->surface, buffer);
 }
 
@@ -17,13 +21,8 @@ handle_frame_callback(struct surface *surface, uint32_t time_msec, void *data)
 	surface->request_frame(surface, handle_frame_callback, data);
 	uint32_t opacity = (time_msec >> 3) & 0xffff;
 	opacity = (opacity ^ ((opacity >> 8) & 1) * 255) & 0xff;
-	//render_frame(data, opacity << 24);
-
 	const float opacity_f = opacity / 255.0;
-	//uint32_t color = opacity << 24;
-	//color |= ((uint8_t)((float)opacity * opacity_f)) << 16;
-	//color |= ((uint8_t)((float)(255 - opacity) * opacity_f)) << 0;
-	uint32_t color = 0xff << 24;
+	uint32_t color = 0xffu << 24;
 	color |= ((uint8_t)((float)opacity * opacity_f)) << 0;
 	color |= ((uint8_t)((float)(255 - opacity) * opacity_f)) << 16;
 

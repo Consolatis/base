@@ -1,7 +1,9 @@
 #include <assert.h>
 #include <sys/mman.h>
 #include <string.h>
+
 #include "base.h"
+#include "buffer.h"
 #include "render.h"
 #include "log.h"
 
@@ -170,31 +172,46 @@ raw_render_checkerboard(void *pixels, uint32_t width, uint32_t height, uint32_t 
 }
 
 void
-renderer_shm_solid(struct buffer *buffer, uint32_t pixel_value)
+render_solid(struct base_buffer *buffer, uint32_t pixel_value)
 {
-	assert(buffer->shm_format == WL_SHM_FORMAT_ARGB8888);
+	assert(buffer->fourcc == DRM_FORMAT_XRGB8888 || buffer->fourcc == DRM_FORMAT_ARGB8888);
+	assert(buffer->modifier == DRM_FORMAT_MOD_LINEAR);
+	assert(buffer->caps & BASE_ALLOCATOR_CAP_CPU_ACCESS);
 
-	void *data = mmap(NULL, buffer->size,
-		PROT_WRITE, MAP_SHARED, buffer->fd, 0);
-	assert(data && data != MAP_FAILED);
-	raw_render_solid(data, buffer->width, buffer->height, buffer->stride, pixel_value);
-	munmap(data, buffer->size);
+	void *pixels = buffer->get_pixels(buffer, BASE_ALLOCATOR_REQ_WRITE);
+	assert(pixels);
+	raw_render_solid(pixels, buffer->width, buffer->height, buffer->stride, pixel_value);
+	buffer->get_pixels_end(buffer, pixels);
 }
 
 void
-renderer_shm_solid_black(struct buffer *buffer)
+render_solid_black(struct base_buffer *buffer)
 {
-	renderer_shm_solid(buffer, 0xff000000);
+	render_solid(buffer, 0xff000000);
 }
 
 void
-renderer_shm_checkerboard(struct buffer *buffer)
+render_checkerboard(struct base_buffer *buffer)
 {
-	assert(buffer->shm_format == WL_SHM_FORMAT_ARGB8888);
+	assert(buffer->fourcc == DRM_FORMAT_XRGB8888 || buffer->fourcc == DRM_FORMAT_ARGB8888);
+	assert(buffer->modifier == DRM_FORMAT_MOD_LINEAR);
+	assert(buffer->caps & BASE_ALLOCATOR_CAP_CPU_ACCESS);
 
-	void *data = mmap(NULL, buffer->size,
-		PROT_WRITE, MAP_SHARED, buffer->fd, 0);
-	assert(data && data != MAP_FAILED);
-	raw_render_checkerboard(data, buffer->width, buffer->height, buffer->stride);
-	munmap(data, buffer->size);
+	void *pixels = buffer->get_pixels(buffer, BASE_ALLOCATOR_REQ_WRITE);
+	assert(pixels);
+	raw_render_checkerboard(pixels, buffer->width, buffer->height, buffer->stride);
+	buffer->get_pixels_end(buffer, pixels);
+}
+
+void
+render_gradient(struct base_buffer *buffer, uint8_t blue)
+{
+	assert(buffer->fourcc == DRM_FORMAT_XRGB8888 || buffer->fourcc == DRM_FORMAT_ARGB8888);
+	assert(buffer->modifier == DRM_FORMAT_MOD_LINEAR);
+	assert(buffer->caps & BASE_ALLOCATOR_CAP_CPU_ACCESS);
+
+	void *pixels = buffer->get_pixels(buffer, BASE_ALLOCATOR_REQ_WRITE);
+	assert(pixels);
+	raw_render_gradient(pixels, buffer->width, buffer->height, buffer->stride, blue);
+	buffer->get_pixels_end(buffer, pixels);
 }

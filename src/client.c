@@ -4,6 +4,7 @@
 #include <string.h>
 
 #include "base.h"
+#include "buffer.h"
 #include "log.h"
 
 #include "cursor-shape-v1.xml.h"
@@ -101,6 +102,7 @@ client_connect(struct client *client)
 		client->should_terminate = true;
 		return;
 	}
+	client->buffer_manager = base_wl_buffer_manager_create(client);
 	state->wl_registry = wl_display_get_registry(state->wl_display);
 	wl_registry_add_listener(state->wl_registry, &wl_registry_listener, client);
 	wl_display_roundtrip(state->wl_display);
@@ -174,12 +176,15 @@ client_create(void)
 {
 	struct client *client = calloc(1, sizeof(*client));
 	assert(client);
+	*client = (struct client) {
+		.add_handler = client_add_handler,
+		.connect = client_connect,
+		.loop = client_loop,
+		.terminate = client_terminate,
+		.destroy = client_destroy,
+		.shm_pool = shm_allocator_create(),
+		.drm_fd = -1,
+	};
 	wl_array_init(&client->callbacks);
-	client->add_handler = client_add_handler;
-	client->connect = client_connect;
-	client->loop = client_loop;
-	client->terminate = client_terminate;
-	client->destroy = client_destroy;
-	client->shm_pool = shm_pool_create(client);
 	return client;
 }

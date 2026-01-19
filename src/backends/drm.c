@@ -1,6 +1,3 @@
-#include "drm.h"
-#include "log.h"
-#include "render.h"
 #include <assert.h>
 #include <errno.h>
 #include <gbm.h>
@@ -12,7 +9,18 @@
 #include <sys/mman.h>
 #include <xf86drm.h>
 
+#include "buffer.h"
+#include "drm.h"
+#include "log.h"
+#include "render.h"
+
 #define ARRAY_SIZE(arr) (sizeof(arr) / sizeof(arr[0]))
+
+struct drm_buffer {
+	void (*destroy)(struct drm_buffer *buffer);
+	struct drm *drm;
+	uint32_t fb_id;
+};
 
 struct prop_map {
 	const char *name;
@@ -160,8 +168,61 @@ find_crtc_encoder_plane_for_connector(struct drm_output *output, drmModeRes *res
 	return false;
 }
 
+static void
+drm_buffer_destroy(struct drm_buffer *drm_buffer)
+{
+	if (drm_buffer->fb_id) {
+		drmModeCloseFB(drm_buffer->drm->fd, drm_buffer->fb_id);
+	}
+	free(drm_buffer);
+}
+
+static struct drm_buffer *
+drm_import_base_buffer(struct drm *drm, struct base_buffer *buffer)
+{
+	if (!(buffer->caps & BASE_ALLOCATOR_CAP_EXPORT_DMABUF)) {
+		log("Can't import non dmabuf buffer into DRM. for now.");
+		return NULL;
+	}
+
+	uint32_t handle;
+	if (drmPrimeFDToHandle(drm->fd, buffer->get_fd(buffer), &handle) != 0) {
+		perror("Failed to get handle for dmabuf");
+		return NULL;
+	}
+
+	struct drm_buffer *drm_buffer = calloc(1, sizeof(*drm_buffer));
+	assert(drm_buffer);
+
+	*drm_buffer = (struct drm_buffer) {
+		.destroy = drm_buffer_destroy,
+		.drm = drm,
+	};
+	uint32_t handles[4] = { handle };
+	uint32_t strides[4] = { buffer->stride };
+	uint32_t offsets[4] = { 0 };
+	uint64_t modifiers[4] = { buffer->modifier };
+	if (drmModeAddFB2WithModifiers(drm->fd, buffer->width, buffer->height, buffer->fourcc,
+		handles, strides, offsets, modifiers, &drm_buffer->fb_id, 0))
+	{
+		perror("importing base buffer into drm failed");
+		free(drm_buffer);
+		return NULL;
+	}
+
+	log("Imported base_buffer %p into drm", drm_buffer);
+	return drm_buffer;
+}
+
+void
+cb_base_buffer_destroy(struct base_buffer *buffer, void *key, void *value)
+{
+	struct drm_buffer *drm_buffer = value;
+	drm_buffer->destroy(drm_buffer);
+}
+
 static bool
-drm_output_set_mode(struct drm_output *output, struct drm_output_mode *mode, struct drm_buffer *buffer)
+drm_output_set_mode(struct drm_output *output, struct drm_output_mode *mode, struct base_buffer *buffer)
 {
 	bool ret = false;
 	int fd = output->drm->fd;
@@ -170,6 +231,15 @@ drm_output_set_mode(struct drm_output *output, struct drm_output_mode *mode, str
 	if (drmModeCreatePropertyBlob(fd, &mode->mode, sizeof(mode->mode), &mode_blob_id)) {
 		perror("drmModeCreatePropertyBlob");
 		return false;
+	}
+
+	struct drm_buffer *drm_buffer = buffer->get_attachment(buffer, output->drm);
+	if (!drm_buffer) {
+		drm_buffer = drm_import_base_buffer(output->drm, buffer);
+		if (!drm_buffer) {
+			return false;
+		}
+		buffer->set_attachment(buffer, output->drm, drm_buffer, cb_base_buffer_destroy);
 	}
 
 	drmModeAtomicReq *req = drmModeAtomicAlloc();
@@ -195,7 +265,7 @@ drm_output_set_mode(struct drm_output *output, struct drm_output_mode *mode, str
 
 	/* Plane */
 	drmModeAtomicAddProperty(req, output->plane_id, output->props.plane.crtc, output->crtc_id);
-	drmModeAtomicAddProperty(req, output->plane_id, output->props.plane.fb, buffer->fb_id);
+	drmModeAtomicAddProperty(req, output->plane_id, output->props.plane.fb, drm_buffer->fb_id);
 
 	drmModeAtomicAddProperty(req, output->plane_id, output->props.plane.src_x, 0);
 	drmModeAtomicAddProperty(req, output->plane_id, output->props.plane.src_y, 0);
@@ -246,15 +316,24 @@ out:
 }
 
 static bool
-drm_output_set_buffer(struct drm_output *output, struct drm_buffer *buffer, bool block)
+drm_output_set_buffer(struct drm_output *output, struct base_buffer *buffer, bool block)
 {
+	struct drm_buffer *drm_buffer = buffer->get_attachment(buffer, output->drm);
+	if (!drm_buffer) {
+		drm_buffer = drm_import_base_buffer(output->drm, buffer);
+		if (!drm_buffer) {
+			return false;
+		}
+		buffer->set_attachment(buffer, output->drm, drm_buffer, cb_base_buffer_destroy);
+	}
+
 	if (block) {
-		return _do_commit(output, buffer->fb_id, block);
+		return _do_commit(output, drm_buffer->fb_id, block);
 	}
 	assert(!output->requested_pageflip_fb_id);
 
 	// maybe try to commit with NONBLOCK first?
-	output->requested_pageflip_fb_id = buffer->fb_id;
+	output->requested_pageflip_fb_id = drm_buffer->fb_id;
 	return true;
 }
 
@@ -355,117 +434,6 @@ drm_discover(struct drm *drm)
 }
 
 static void
-drm_buffer_destroy(struct drm_buffer *buffer)
-{
-	if (buffer->fb_id) {
-		drmModeCloseFB(buffer->drm->fd, buffer->fb_id);
-	}
-
-	switch(buffer->type) {
-	case DRM_GBM_BUFFER:
-		/* Called by the destruction handler of gbm_bo so nothing to do */
-		break;
-	case DRM_DUMB_BUFFER:
-		// FIXME: properly unmap and destroy
-		break;
-	}
-	free(buffer);
-}
-
-static struct drm_dumb_buffer *
-create_dumb_buffer(struct drm *drm, uint32_t width, uint32_t height, uint32_t format)
-{
-	// FIXME:
-	//        - Parse format and calculate bpp, maybe there is a fourcc helper?
-	//        - unmap on error
-
-	/* Create buffer */
-	struct drm_dumb_buffer *buffer = calloc(1, sizeof(*buffer));
-	assert(buffer);
-	*buffer = (struct drm_dumb_buffer) {
-		.base = {
-			.drm = drm,
-			.type = DRM_DUMB_BUFFER,
-			.fourcc = format,
-			.destroy = drm_buffer_destroy,
-		},
-		.req.width = width,
-		.req.height = height,
-		.req.bpp = 32,
-	};
-	if (ioctl(drm->fd, DRM_IOCTL_MODE_CREATE_DUMB, &buffer->req) < 0) {
-		perror("Failed to create dumb buffer");
-		goto cleanup_buffer;
-	}
-	buffer->base.width = buffer->req.width;
-	buffer->base.height = buffer->req.height;
-	buffer->base.stride = buffer->req.pitch;
-
-	/* Map into address space */
-	// TODO: should we always keep it mapped or map before use and then unmap?
-	//       would require ->map() and ->unmap() functions in that case
-	struct drm_mode_map_dumb mreq = {
-		.handle = buffer->req.handle,
-	};
-	if (ioctl(drm->fd, DRM_IOCTL_MODE_MAP_DUMB, &mreq) < 0) {
-		perror("Failed to import dumb buffer");
-		goto cleanup_buffer;
-	}
-	buffer->pixels = mmap(NULL, buffer->req.size,
-		PROT_READ | PROT_WRITE, MAP_SHARED, drm->fd, mreq.offset);
-	if (buffer->pixels == MAP_FAILED) {
-		perror("Failed to map dumb buffer");
-		goto cleanup_buffer;
-	}
-
-	/* Create framebuffer */
-	// TODO: pixel depth is hardcoded to 24
-	if (drmModeAddFB(drm->fd, buffer->req.width, buffer->req.height, 24, buffer->req.bpp, buffer->req.pitch, buffer->req.handle, &buffer->base.fb_id)) {
-		perror("Failed to create framebuffer for dumb buffer");
-		goto cleanup_map;
-	}
-
-	return buffer;
-
-cleanup_map:
-	// FIXME
-
-cleanup_buffer:
-	free(buffer);
-
-	return NULL;
-}
-
-static struct drm_buffer *
-drm_import_gbm_bo(struct drm *drm, struct gbm_bo *bo)
-{
-	struct drm_buffer *buffer = calloc(1, sizeof(*buffer));
-	assert(buffer);
-
-	*buffer = (struct drm_buffer) {
-		.type = DRM_GBM_BUFFER,
-		.width = gbm_bo_get_width(bo),
-		.height = gbm_bo_get_height(bo),
-		.stride = gbm_bo_get_stride(bo),
-		.fourcc = gbm_bo_get_format(bo),
-		.destroy = drm_buffer_destroy,
-		.drm = drm,
-	};
-	uint32_t handles[4] = { gbm_bo_get_handle(bo).u32 };
-	uint32_t strides[4] = { buffer->stride };
-	uint32_t offsets[4] = { 0 };
-	uint64_t modifiers[4] = { gbm_bo_get_modifier(bo) };
-	if (drmModeAddFB2WithModifiers(drm->fd, buffer->width, buffer->height, buffer->fourcc,
-		handles, strides, offsets, modifiers, &buffer->fb_id, 0))
-	{
-		perror("importing gbm buffer into drm failed");
-		free(buffer);
-		return NULL;
-	}
-	return buffer;
-}
-
-static void
 page_flip_handler(int fd, unsigned int sequence, unsigned int tv_sec, unsigned int tv_usec,
 		void *user_data)
 {
@@ -541,10 +509,8 @@ drm_create(int fd)
 	assert(drm);
 	*drm = (struct drm) {
 		.fd = fd,
-		.import_gbm_bo = drm_import_gbm_bo,
 		.read_events = drm_read_events,
 		.destroy = drm_destroy,
-		.allocator.create_dumb_buffer = create_dumb_buffer,
 	};
 	wl_list_init(&drm->outputs);
 	if (!drm_discover(drm)) {
